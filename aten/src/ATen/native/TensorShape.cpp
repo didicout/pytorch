@@ -1431,7 +1431,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
       // nneg_index = (index < 0) * (index + size) + (index >= 0) * index
       auto* ptr_index = index_contiguous.data_ptr<int64_t>();
       auto* ptr_nneg_index = nneg_index.data_ptr<int64_t>();
-      at::parallel_for(0, index_len, at::internal::GRAIN_SIZE, [&](int64_t start, int64_t end) {
+      at::parallel_for(0, index_len, index_len, [&](int64_t start, int64_t end) {
           const auto* src = ptr_index + start;
           auto* dst = ptr_nneg_index + start;
           for (C10_UNUSED const auto _ : c10::irange(start, end)) {
@@ -1458,12 +1458,8 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
     // then this is followed by a binary search to find interesections.
     const auto get_selected_indices_small_nnz_large_size = [&]() -> std::tuple<Tensor, Tensor> {
       const auto grain_size = at::internal::GRAIN_SIZE;
-      const auto n_threads_nnz = std::max<int64_t>(
-          1, std::min<int64_t>((nnz + grain_size - 1) / grain_size, at::get_num_threads())
-      );
-      const auto n_threads_index = std::max<int64_t>(
-          1, std::min<int64_t>((index_len + grain_size - 1) / grain_size, at::get_num_threads())
-      );
+      const auto n_threads_nnz = 1;
+      const auto n_threads_index = 1;
       const auto search_in_dim_indices
         // if either dim_indices or index requires sorting, we compare
         // the cost of sort + binary search, which is comparing
@@ -1509,12 +1505,9 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
         }
       }();
 
-      const auto src_grain_size = at::internal::GRAIN_SIZE;
+      const auto src_grain_size = src.numel();
       const auto src_len = src.numel();
-      const auto n_threads_src = std::max<int64_t>(
-          // 1 <= n_threads_src <= std::min(ceil(src.numel() / src_grain_size), max_threads)
-          1, std::min<int64_t>((src_len + src_grain_size - 1) / src_grain_size, at::get_num_threads())
-      );
+      const auto n_threads_src = 1;
 
       const std::vector<int64_t> src_n_threads_shape = {
         n_threads_src, (src_len + n_threads_src - 1) / n_threads_src
@@ -1645,7 +1638,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
       std::fill_n(ptr_cidx, ptr_idx[0] + 1, 0);
       std::fill_n(ptr_cidx + ptr_idx[idx_len - 1] + 1, len - ptr_idx[idx_len - 1], idx_len);
 
-      const auto grain_size = run_in_parallel ? at::internal::GRAIN_SIZE : idx_len;
+      const auto grain_size = idx_len;
       at::parallel_for(0, idx_len, grain_size, [&](int64_t start, int64_t end) {
           auto* ptr_curr_cidx = ptr_cidx + ptr_idx[start] + 1;
           for (int64_t i = start; i < std::min(end, idx_len - 1); ++i) {
@@ -1696,7 +1689,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
         const auto run_in_parallel = (n_threads == 1);
 
         auto counts_per_thread = at::zeros({n_threads, size}, idx.options());
-        at::parallel_for(0, idx_len, grain_size, [&](int64_t start, int64_t end) {
+        at::parallel_for(0, idx_len, idx_len, [&](int64_t start, int64_t end) {
           const auto tid = at::get_thread_num();
           const auto tid_idx = idx.slice(0, start, end);
           auto tid_counts = counts_per_thread.select(0, tid);
@@ -1709,15 +1702,15 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
 
       auto dim_indices_counts_per_thread = counts_per_thread(
           dim_indices,
-          /*is_sorted=*/self.is_coalesced() && dim == 0
-          /*grain_size = at::internal::GRAIN_SIZE*/
+          /*is_sorted=*/self.is_coalesced() && dim == 0,
+          dim_indices.numel()
       );
       auto dim_indices_offset_counts_per_thread = dim_indices_counts_per_thread.cumsum(0);
 
       auto index_counts_per_thread = counts_per_thread(
           nneg_index,
-          /*is_sorted=*/false
-          /*grain_size = at::internal::GRAIN_SIZE*/
+          /*is_sorted=*/false,
+          nneg_index.numel()
       );
       auto index_offset_counts_per_thread = index_counts_per_thread.cumsum(0);
 
@@ -1734,12 +1727,8 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
 
       const auto search_in_dim_indices = [&]() -> bool {
         const auto grain_size = at::internal::GRAIN_SIZE;
-        const auto n_threads_index = std::max<int64_t>(
-            1, std::min<int64_t>((index_len + grain_size - 1) / grain_size, at::get_num_threads())
-        );
-        const auto n_threads_dim_indices = std::max<int64_t>(
-            1, std::min<int64_t>((nnz + grain_size - 1) / grain_size, at::get_num_threads())
-        );
+        const auto n_threads_index = 1;
+        const auto n_threads_dim_indices = 1;
 
         const auto index_max_copy_work_per_thread =
           index_counts_per_thread.mul(dim_indices_counts).sum(-1).max().item<int64_t>();
@@ -1788,7 +1777,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
         const auto* ptr_src_intersection_offsets = src_intersection_offsets.data_ptr<int64_t>();
         auto* ptr_src_idx = src_idx.data_ptr<int64_t>();
 
-        at::parallel_for(0, src.numel(), grain_size, [&](int64_t start, int64_t end) {
+        at::parallel_for(0, src.numel(), src.numel(), [&](int64_t start, int64_t end) {
             const auto tid = at::get_thread_num();
             auto* ptr_src_tid = ptr_src + start;
             const auto* ptr_src_counts_per_thread
@@ -1842,7 +1831,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
         auto* ptr_idx_selected = idx_selected.data_ptr<int64_t>();
         auto* ptr_src_selected = src_selected.data_ptr<int64_t>();
 
-        at::parallel_for(0, idx.numel(), grain_size, [&](int64_t start, int64_t end) {
+        at::parallel_for(0, idx.numel(), idx.numel(), [&](int64_t start, int64_t end) {
             const auto tid = at::get_thread_num();
             const auto tid_offset = ptr_thread_offset[tid];
             const auto* ptr_idx_tid = ptr_idx + start;
