@@ -375,9 +375,18 @@ def _generate_iterdatapipe_msg(datapipe):
 def _check_iterator_valid(datapipe, iterator_id) -> None:
     r"""
     Given an instance of a DataPipe and an iterator ID, check if they match, and if not, raises an exception.
+    In the case of ChildDataPipe, the ID gets compared to the one stored in `main_datapipe` as well.
     """
     if hasattr(datapipe, "_is_child_datapipe") and datapipe._is_child_datapipe is True:
-        pass  # TODO: Add logic for multiple ChildDataPipe
+        if hasattr(datapipe, "_check_valid_iterator_id"):
+            if datapipe._check_valid_iterator_id(iterator_id):
+                pass
+            else:
+                raise RuntimeError("This iterator has been invalidated, because a new iterator has been created "
+                                   f"from one of the ChildDataPipes of "
+                                   f"{_generate_iterdatapipe_msg(datapipe.main_datapipe)}")
+        else:
+            raise RuntimeError("ChildDataPipe must have method `_check_valid_iterator_id`.")
     else:
         if datapipe._valid_iterator_id == iterator_id:
             pass
@@ -394,10 +403,16 @@ def _set_datapipe_valid_iterator_id(datapipe):
     r"""
     Given a DataPipe, set or update its valid iterator ID.
     """
-    if datapipe._valid_iterator_id is None:
-        datapipe._valid_iterator_id = 0
+    if hasattr(datapipe, "_is_child_datapipe") and datapipe._is_child_datapipe is True:
+        if hasattr(datapipe, "_set_main_datapipe_valid_iterator_id"):
+            datapipe._set_main_datapipe_valid_iterator_id()
+        else:
+            raise RuntimeError("ChildDataPipe must have method `_set_main_datapipe_valid_iterator_id`.")
     else:
-        datapipe._valid_iterator_id += 1
+        if datapipe._valid_iterator_id is None:
+            datapipe._valid_iterator_id = 0
+        else:
+            datapipe._valid_iterator_id += 1
     return datapipe._valid_iterator_id
 
 
