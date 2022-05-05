@@ -70,6 +70,7 @@ class IterDataPipe(IterableDataset[T_co], metaclass=_IterDataPipeMeta):
     getstate_hook: Optional[Callable] = None
     str_hook: Optional[Callable] = None
     repr_hook: Optional[Callable] = None
+    _valid_iterator_id: Optional[int] = None
 
     def __getattr__(self, attribute_name):
         if attribute_name in IterDataPipe.functions:
