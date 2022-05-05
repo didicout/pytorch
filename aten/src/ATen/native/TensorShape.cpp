@@ -1457,7 +1457,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
     // If nnz is smaller than size, then either indices[dim] or index gets sorted,
     // then this is followed by a binary search to find interesections.
     const auto get_selected_indices_small_nnz_large_size = [&]() -> std::tuple<Tensor, Tensor> {
-      const auto grain_size = at::internal::GRAIN_SIZE;
+      //const auto grain_size = at::internal::GRAIN_SIZE;
       const auto n_threads_nnz = 1;
       const auto n_threads_index = 1;
       const auto search_in_dim_indices
@@ -1726,7 +1726,7 @@ Tensor index_select_sparse_cpu(const Tensor& self, int64_t dim, const Tensor& in
       const auto intersection_offsets = intersection_counts.cumsum(0);
 
       const auto search_in_dim_indices = [&]() -> bool {
-        const auto grain_size = at::internal::GRAIN_SIZE;
+        //const auto grain_size = at::internal::GRAIN_SIZE;
         const auto n_threads_index = 1;
         const auto n_threads_dim_indices = 1;
 
