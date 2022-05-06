@@ -10,13 +10,14 @@
 namespace torch {
 namespace lazy {
 namespace {
+
 void TraverseTrie(TrieNode* node, std::stringstream& ss) {
   if (!node) {
     return;
   }
   if (node->ir_node) {
     ss << node->unique_id << "[label=\"" << node->ir_node->op().ToString()
-        << "\"]\n";
+        << ", " << node->hit_counter << " hits\"]\n";
   }
   for (auto& successor : node->successors) {
     ss << node->unique_id << " -> " << successor->unique_id << "\n";
@@ -63,6 +64,7 @@ void TrieCache::Insert(NodePtr ir_node) {
 }
 
 void TrieCache::Clear() {
+  ResetCurrent();
   // Clear at the root level should be sufficient because all the nodes
   // are created as shared_ptr.
   root_->successors.clear();
