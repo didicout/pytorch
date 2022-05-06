@@ -650,7 +650,15 @@ class GitHubPR:
         else:
             self.merge_ghstack_into(repo, force)
 
-        repo.push(self.default_branch(), dry_run)
+        push_master_xla(repo, self, dry_run)
+
+
+def push_master_xla(repo: GitRepo, pr: GitHubPR, dry_run: bool) -> Any:
+    repo.push(pr.default_branch(), dry_run)
+    if dry_run:
+        repo._run_git("push", "origin", f"{pr.default_branch()}:refs/heads/xla", "--dry-run")
+    else:
+        repo._run_git("push", "origin", f"{pr.default_branch()}:refs/heads/xla")
 
 
 @dataclass
@@ -789,7 +797,7 @@ def try_revert(repo: GitRepo, pr: GitHubPR, *, dry_run: bool = False, comment_id
     msg = re.sub(RE_PULL_REQUEST_RESOLVED, "", msg)
     msg += f"\nReverted {pr.get_pr_url()} on behalf of {prefix_with_github_url(author_login)}\n"
     repo.amend_commit_message(msg)
-    repo.push(pr.default_branch(), dry_run)
+    push_master_xla(repo, pr, dry_run)
     if not dry_run:
         gh_add_labels(pr.org, pr.project, pr.pr_num, ["reverted"])
 
