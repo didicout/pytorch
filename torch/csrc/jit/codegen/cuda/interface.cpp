@@ -41,7 +41,8 @@ class NVFuserEnabler {
 #ifdef USE_ROCM
     return false;
 #else
-    return at::globalContext().hasCUDA() && NVFuserPassManager::isRegistered();
+    return at::globalContext().hasCUDA() &&
+        NVFuserPassManager::isRegistered() && getExecutorMode();
 #endif
   }
 
@@ -89,9 +90,8 @@ class NVFuserEnabler {
     if (getCachedFuserEnabledEnvVar().has_value()) {
       return *getCachedFuserEnabledEnvVar();
     }
-    // 3. default value (if you switch this to true, make sure
-    //    to check nvfuserCanBeEnabled())
-    return false;
+    // 3. default value
+    return nvfuserCanBeEnabled();
   }
 
  public:
